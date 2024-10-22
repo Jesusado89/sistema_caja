@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import messagebox
 import sqlite3
 import datetime
+import os
 
 # Crear la base de datos y las tablas necesarias
 def create_db():
@@ -65,7 +66,7 @@ def agregar_resultado(hora, resultado):
     conn.commit()
     conn.close()
 
-# Calcular el monto total jugado
+# Calcular el monto total jugado menos el 10%
 def calcular_monto_total():
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
@@ -77,7 +78,7 @@ def calcular_monto_total():
     total = cursor.fetchone()[0]
     conn.close()
 
-    return total if total else 0
+    return total * 0.9 if total else 0
 
 # Verificar si hay un ticket ganador
 def verificar_ganador():
@@ -102,11 +103,6 @@ def verificar_ganador():
     conn.close()
     return None
 
-# Guardar el ticket ganador en un archivo .txt
-def guardar_ticket_ganador(ticket_info):
-    with open("ganadores.txt", "a") as file:
-        file.write(ticket_info + "\n")
-
 # Generar el ticket en el formato correcto
 def generar_ticket(ticket):
     id_ticket, animal1, animal2, animal3, monto, timestamp = ticket
@@ -130,6 +126,19 @@ def copiar_al_portapapeles(texto):
     window.clipboard_clear()
     window.clipboard_append(texto)
     messagebox.showinfo("Copiado", "El texto ha sido copiado al portapapeles.")
+
+# Guardar el ticket ganador en un archivo .txt con sorteo incremental
+def guardar_ticket_ganador(ticket_info):
+    sorteo_num = 1
+    if os.path.exists('ganadores.txt'):
+        with open('ganadores.txt', 'r') as file:
+            lines = file.readlines()
+            for line in lines:
+                if "Ganador del sorteo" in line:
+                    sorteo_num += 1
+
+    with open('ganadores.txt', 'a') as file:
+        file.write(f"Ganador del sorteo {sorteo_num}\n{ticket_info}\n")
 
 # Interfaz gráfica
 def interfaz():
@@ -159,15 +168,14 @@ def interfaz():
         if ganador:
             ticket_info = generar_ticket(ganador)
             total = calcular_monto_total()
-            premio_repartir = total * 0.9  # Total menos el 10%
-            ticket_info += f"\nPremio a repartir: {premio_repartir:.2f} soles."
-            messagebox.showinfo("¡Ticket ganador!", f"{ticket_info}\nPremio a repartir: {premio_repartir:.2f} soles.")
+            ticket_info += f"\nPremio a repartir: {total} soles."
+            messagebox.showinfo("¡Ticket ganador!", f"{ticket_info}\nPremio a repartir: {total} soles.")
             
             # Copiar ticket y premio al portapapeles
             if messagebox.askyesno("Copiar Ticket", "¿Deseas copiar el ticket ganador al portapapeles?"):
                 copiar_al_portapapeles(ticket_info)
-
-            # Guardar el ticket ganador en un archivo .txt
+            
+            # Guardar ticket ganador en el archivo
             guardar_ticket_ganador(ticket_info)
 
             reiniciar_base_datos()
@@ -177,8 +185,7 @@ def interfaz():
 
     def ver_monto_total():
         total = calcular_monto_total()
-        premio_repartir = total * 0.9
-        mensaje_monto = f"Premio a repartir: {premio_repartir:.2f} soles."
+        mensaje_monto = f"Premio a repartir: {total} soles."
         messagebox.showinfo("Monto acumulado", mensaje_monto)
         
         if messagebox.askyesno("Copiar Monto", "¿Deseas copiar el monto al portapapeles?"):

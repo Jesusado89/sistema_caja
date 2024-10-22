@@ -1,13 +1,28 @@
+Ganador del sorteo 1
 TICKET
 La Millonaria
-SERIAL #1000008
-TICKET #8
-2024-10-21 21:57:20
+SERIAL #1000002
+TICKET #2
+2024-10-21 22:50:55
 ---------CAJA FUERTE---------
-01 perico 02 gallina 03 pavo
+01 gato 02 oso 03 loro
 -----------------------------
 
 Monto: 5.0 SOL
 REVISE SU TICKET NO ACEPTAMOS RECLAMOS
 
-Premio a repartir: 36.00 soles.
+Premio a repartir: 9.0 soles.
+Ganador del sorteo 2
+TICKET
+La Millonaria
+SERIAL #1000002
+TICKET #2
+2024-10-21 22:52:51
+---------CAJA FUERTE---------
+01 gato 02 perro 03 raton
+-----------------------------
+
+Monto: 5.0 SOL
+REVISE SU TICKET NO ACEPTAMOS RECLAMOS
+
+Premio a repartir: 18.0 soles.
