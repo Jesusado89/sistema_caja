@@ -5,16 +5,14 @@ from tkinter import messagebox
 import sqlite3
 import datetime
 
+
 # Crear la base de datos y las tablas necesarias
 def create_db():
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
-    cursor.execute('DROP TABLE IF EXISTS tickets')
-    cursor.execute('DROP TABLE IF EXISTS sorteos')
-    cursor.execute('DROP TABLE IF EXISTS acumulado')
-
-    cursor.execute('''
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS tickets (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nombre TEXT,
@@ -24,111 +22,149 @@ def create_db():
             monto REAL,
             timestamp TEXT
         )
-    ''')
+    """
+    )
 
-    cursor.execute('''
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS sorteos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             hora TEXT,
             resultado TEXT
         )
-    ''')
+    """
+    )
 
-    cursor.execute('''
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS acumulado (
             id INTEGER PRIMARY KEY,
             monto REAL DEFAULT 0
         )
-    ''')
+    """
+    )
 
-    cursor.execute("INSERT INTO acumulado (id, monto) VALUES (1, 0)")
+    # Inicializar acumulado si no existe
+    cursor.execute("INSERT OR IGNORE INTO acumulado (id, monto) VALUES (1, 0)")
     conn.commit()
     conn.close()
+
+
+# Actualizar o crear archivo jugadores.txt
+def actualizar_archivo_jugadores(nombre, animal1, animal2, animal3):
+    with open("jugadores.txt", "a") as archivo:
+        archivo.write(f"Jugador: {nombre}\n")
+        archivo.write(f"Animales: {animal1}, {animal2}, {animal3}\n")
+        archivo.write("-" * 30 + "\n")
+
 
 # Agregar un nuevo ticket
 def agregar_ticket(nombre, animal1, animal2, animal3, monto):
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    cursor.execute('''
+    cursor.execute(
+        """
         INSERT INTO tickets (nombre, animal1, animal2, animal3, monto, timestamp)
         VALUES (?, ?, ?, ?, ?, ?)
-    ''', (nombre, animal1, animal2, animal3, monto, timestamp))
+    """,
+        (nombre, animal1, animal2, animal3, monto, timestamp),
+    )
 
-    cursor.execute('UPDATE acumulado SET monto = monto + ?', (monto,))
-    ticket_id = cursor.lastrowid
+    # Actualizar el monto acumulado
+    cursor.execute("UPDATE acumulado SET monto = monto + ?", (monto,))
     conn.commit()
+    ticket_id = cursor.lastrowid
     conn.close()
+
+    # Actualizar archivo jugadores.txt
+    actualizar_archivo_jugadores(nombre, animal1, animal2, animal3)
+
     return ticket_id, timestamp
 
-# Agregar un nuevo resultado
-def agregar_resultado(hora, resultado):
-    conn = sqlite3.connect('database.db')
-    cursor = conn.cursor()
 
-    cursor.execute('''
+# Agregar un nuevo resultado del sorteo
+def agregar_resultado(hora, resultado):
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+    cursor.execute(
+        """
         INSERT INTO sorteos (hora, resultado)
         VALUES (?, ?)
-    ''', (hora, resultado))
-
+    """,
+        (hora, resultado),
+    )
     conn.commit()
     conn.close()
 
-# Calcular el monto total jugado
-def calcular_monto_total():
-    conn = sqlite3.connect('database.db')
-    cursor = conn.cursor()
 
-    cursor.execute('SELECT monto FROM acumulado WHERE id = 1')
+# Calcular el monto total jugado (80% después del descuento)
+def calcular_monto_total():
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT monto FROM acumulado WHERE id = 1")
     total = cursor.fetchone()[0]
     conn.close()
-
     return total * 0.8  # Descontar el 20%
+
 
 # Verificar si hay tickets ganadores
 def verificar_ganador():
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
-    cursor.execute('SELECT resultado FROM sorteos')
+    # Obtener los resultados de los sorteos
+    cursor.execute("SELECT resultado FROM sorteos")
     resultados = [row[0] for row in cursor.fetchall()]
 
-    if len(resultados) < 3:
-        return []
-
-    cursor.execute('SELECT * FROM tickets')
+    # Buscar tickets ganadores
+    cursor.execute("SELECT * FROM tickets")
     tickets = cursor.fetchall()
-    
+
     ganadores = []
     for ticket in tickets:
         _, nombre, animal1, animal2, animal3, _, _ = ticket
         if animal1 in resultados and animal2 in resultados and animal3 in resultados:
-            if resultados.index(animal1) < resultados.index(animal2) < resultados.index(animal3):
-                ganadores.append(ticket)
+            ganadores.append(ticket)
 
     conn.close()
     return ganadores
 
-# Generar el ticket en el formato correcto
-def generar_ticket(ticket, premio_por_ganador=None):
-    id_ticket, nombre, animal1, animal2, animal3, monto, timestamp = ticket
-    premio_texto = f"Premio ganado: {premio_por_ganador:.2f} SOL" if premio_por_ganador else ""
-    ticket_info = f"""\
-TICKET
-La Millonaria
-SERIAL #{id_ticket + 1000000}
-TICKET #{id_ticket}
-{timestamp}
-Nombre del Jugador: {nombre}
----------CAJA FUERTE---------
-01 {animal1} 02 {animal2} 03 {animal3}
------------------------------
 
-Monto: {monto} SOL
-REVISE SU TICKET NO ACEPTAMOS RECLAMOS
-{premio_texto}
-"""
-    return ticket_info
+# Mostrar jugadores que están a 1 o 2 animales de ganar y los animales faltantes
+def jugadores_cerca_de_ganar():
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    # Obtener los resultados de los sorteos
+    cursor.execute("SELECT resultado FROM sorteos")
+    resultados = [row[0] for row in cursor.fetchall()]
+
+    # Buscar jugadores cerca de ganar
+    cursor.execute("SELECT * FROM tickets")
+    tickets = cursor.fetchall()
+
+    cerca_de_ganar = []
+    for ticket in tickets:
+        _, nombre, animal1, animal2, animal3, _, _ = ticket
+        animales = [animal1, animal2, animal3]
+        faltantes = [animal for animal in animales if animal not in resultados]
+        if len(faltantes) in [1, 2]:
+            cerca_de_ganar.append((nombre, len(faltantes), faltantes))
+
+    conn.close()
+    return cerca_de_ganar
+
+
+# Reiniciar la base de datos pero mantener el acumulado
+def reiniciar_base_datos():
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM tickets")
+    cursor.execute("DELETE FROM sorteos")
+    conn.commit()
+    conn.close()
+
 
 # Copiar texto al portapapeles
 def copiar_al_portapapeles(texto):
@@ -136,16 +172,24 @@ def copiar_al_portapapeles(texto):
     window.clipboard_append(texto)
     messagebox.showinfo("Copiado", "El texto ha sido copiado al portapapeles.")
 
-# Reiniciar la base de datos incluyendo el monto acumulado cuando hay un ganador
-def reiniciar_base_datos_completa():
-    conn = sqlite3.connect('database.db')
-    cursor = conn.cursor()
-    cursor.execute('DELETE FROM tickets')
-    cursor.execute('DELETE FROM sorteos')
-    cursor.execute('UPDATE acumulado SET monto = 0')
-    conn.commit()
-    conn.close()
-    messagebox.showinfo("Reiniciado", "La base de datos ha sido reiniciada completamente.")
+
+# Generar ticket en formato legible
+def generar_ticket(ticket):
+    id_ticket, nombre, animal1, animal2, animal3, monto, timestamp = ticket
+    return f"""
+TICKET 
+La Millonaria
+Serial #{id_ticket}
+Fecha: {timestamp}
+Jugador: {nombre}
+_____POLLA MILLONARIA_____
+Jugadas:
+  - {animal1}
+  - {animal2}
+  - {animal3}
+Monto: {monto} SOL
+    """
+
 
 # Interfaz gráfica
 def interfaz():
@@ -156,18 +200,20 @@ def interfaz():
         animal3 = entry_animal3.get()
         try:
             monto = float(entry_monto.get())
-            ticket_id, timestamp = agregar_ticket(nombre, animal1, animal2, animal3, monto)
-            ticket_info = generar_ticket((ticket_id, nombre, animal1, animal2, animal3, monto, timestamp))
-            messagebox.showinfo("Ticket creado", f"El ticket ha sido creado:\n\n{ticket_info}")
-            
-            # Opción para copiar el ticket
-            if messagebox.askyesno("Copiar Ticket", "¿Deseas copiar el ticket al portapapeles?"):
+            ticket_id, timestamp = agregar_ticket(
+                nombre, animal1, animal2, animal3, monto
+            )
+            ticket = (ticket_id, nombre, animal1, animal2, animal3, monto, timestamp)
+            ticket_info = generar_ticket(ticket)
+            messagebox.showinfo(
+                "Ticket creado", f"El ticket ha sido creado:\n\n{ticket_info}"
+            )
+
+            # Copiar al portapapeles
+            if messagebox.askyesno(
+                "Copiar Ticket", "¿Deseas copiar el ticket al portapapeles?"
+            ):
                 copiar_al_portapapeles(ticket_info)
-
-            # Guardar en jugadores.txt
-            with open("jugadores.txt", "a") as f:
-                f.write(f"Jugador {nombre}: {animal1}, {animal2}, {animal3}\n")
-
         except ValueError:
             messagebox.showerror("Error", "Por favor ingresa un monto válido.")
 
@@ -181,84 +227,93 @@ def interfaz():
             total = calcular_monto_total()
             premio_por_ganador = total / len(ganadores)
             ganador_info = "\n\n".join(
-                generar_ticket(ganador, premio_por_ganador) for ganador in ganadores
+                generar_ticket(ganador) + f"\nPremio: {premio_por_ganador:.2f} SOL"
+                for ganador in ganadores
             )
-            messagebox.showinfo("¡Tickets Ganadores!", f"{ganador_info}\nPremio total a repartir: {total} soles.")
-
-            if messagebox.askyesno("Copiar Tickets", "¿Deseas copiar los tickets ganadores al portapapeles?"):
-                copiar_al_portapapeles(ganador_info)
-
-            # Guardar en ganadores.txt bajo un solo sorteo
-            with open("ganadores.txt", "a") as f:
-                f.write(f"Ganadores del sorteo 1:\n")
-                for ganador in ganadores:
-                    f.write(f"{generar_ticket(ganador, premio_por_ganador)}\n\n")
-
-            reiniciar_base_datos_completa()  # Reinicia todo incluyendo el acumulado
+            messagebox.showinfo(
+                "¡Ganadores!", f"{ganador_info}\nPremio total: {total:.2f} SOL"
+            )
+            reiniciar_base_datos()
         else:
-            # Verificar si hay 11 resultados sin ganador para reiniciar parcialmente
-            conn = sqlite3.connect('database.db')
-            cursor = conn.cursor()
-            cursor.execute('SELECT COUNT(*) FROM sorteos')
-            if cursor.fetchone()[0] >= 11:
-                cursor.execute('DELETE FROM tickets')
-                conn.commit()
-                messagebox.showinfo("Reinicio parcial", "No hubo ganador en 11 sorteos consecutivos. Los tickets han sido eliminados.")
-            conn.close()
-            messagebox.showinfo("Resultado agregado", f"El resultado del sorteo a las {hora} ha sido agregado. No hay ganador por ahora.")
+            messagebox.showinfo("Sin ganadores", "No hay ganadores para este sorteo.")
 
-    def ver_monto_total():
+    def ver_monto_total_action():
         total = calcular_monto_total()
-        mensaje_monto = f"Premio a repartir: {total:.2f} soles."
-        messagebox.showinfo("Monto acumulado", mensaje_monto)
-        
-        if messagebox.askyesno("Copiar Monto", "¿Deseas copiar el monto al portapapeles?"):
-            copiar_al_portapapeles(mensaje_monto)
+        mensaje = f"Premio a repartir: {total:.2f} SOL"
+        messagebox.showinfo("Monto acumulado", mensaje)
+        if messagebox.askyesno(
+            "Copiar Monto", "¿Deseas copiar el monto al portapapeles?"
+        ):
+            copiar_al_portapapeles(mensaje)
 
-    # Crear la ventana principal
+    def jugadores_cerca_action():
+        cerca = jugadores_cerca_de_ganar()
+        if cerca:
+            lista = "\n".join(
+                f"{nombre} está a {coincidencias} animal(es) de ganar. Faltan: {', '.join(faltantes)}"
+                for nombre, coincidencias, faltantes in cerca
+            )
+            messagebox.showinfo("Jugadores cerca de ganar", lista)
+            if messagebox.askyesno(
+                "Copiar Lista", "¿Deseas copiar la lista al portapapeles?"
+            ):
+                copiar_al_portapapeles(lista)
+        else:
+            messagebox.showinfo(
+                "Sin jugadores cerca", "No hay jugadores cerca de ganar."
+            )
+
+    # Crear ventana principal
     global window
     window = tk.Tk()
     window.title("Sistema de Sorteos")
 
-    # Campos para ingresar los detalles del ticket
-    tk.Label(window, text="Nombre del jugador:").pack()
+    # Widgets
+    tk.Label(window, text="Nombre del jugador:").grid(row=0, column=0)
     entry_nombre = tk.Entry(window)
-    entry_nombre.pack()
+    entry_nombre.grid(row=0, column=1)
 
-    tk.Label(window, text="Animal 1:").pack()
+    tk.Label(window, text="Animal 1:").grid(row=1, column=0)
     entry_animal1 = tk.Entry(window)
-    entry_animal1.pack()
+    entry_animal1.grid(row=1, column=1)
 
-    tk.Label(window, text="Animal 2:").pack()
+    tk.Label(window, text="Animal 2:").grid(row=2, column=0)
     entry_animal2 = tk.Entry(window)
-    entry_animal2.pack()
+    entry_animal2.grid(row=2, column=1)
 
-    tk.Label(window, text="Animal 3:").pack()
+    tk.Label(window, text="Animal 3:").grid(row=3, column=0)
     entry_animal3 = tk.Entry(window)
-    entry_animal3.pack()
+    entry_animal3.grid(row=3, column=1)
 
-    tk.Label(window, text="Monto (Soles):").pack()
+    tk.Label(window, text="Monto jugado:").grid(row=4, column=0)
     entry_monto = tk.Entry(window)
-    entry_monto.pack()
+    entry_monto.grid(row=4, column=1)
 
-    tk.Button(window, text="Agregar Ticket", command=agregar_ticket_action).pack()
+    tk.Button(window, text="Agregar Ticket", command=agregar_ticket_action).grid(
+        row=5, column=0, columnspan=2
+    )
 
-    # Campos para agregar un resultado de sorteo
-    tk.Label(window, text="Hora del sorteo:").pack()
+    tk.Label(window, text="Hora del sorteo:").grid(row=6, column=0)
     entry_hora = tk.Entry(window)
-    entry_hora.pack()
+    entry_hora.grid(row=6, column=1)
 
-    tk.Label(window, text="Resultado:").pack()
+    tk.Label(window, text="Resultado:").grid(row=7, column=0)
     entry_resultado = tk.Entry(window)
-    entry_resultado.pack()
+    entry_resultado.grid(row=7, column=1)
 
-    tk.Button(window, text="Agregar Resultado", command=agregar_resultado_action).pack()
-
-    # Ver el monto acumulado
-    tk.Button(window, text="Ver Monto Acumulado", command=ver_monto_total).pack()
+    tk.Button(window, text="Agregar Resultado", command=agregar_resultado_action).grid(
+        row=8, column=0, columnspan=2
+    )
+    tk.Button(window, text="Ver Monto Total", command=ver_monto_total_action).grid(
+        row=9, column=0, columnspan=2
+    )
+    tk.Button(
+        window, text="Jugadores Cerca de Ganar", command=jugadores_cerca_action
+    ).grid(row=10, column=0, columnspan=2)
 
     window.mainloop()
 
-# Ejecutar el código principal
-create_db()
-interfaz()
+
+if __name__ == "__main__":
+    create_db()
+    interfaz()
